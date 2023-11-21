@@ -3,7 +3,7 @@
     {
       "name": "install.sh",
       "url": "https://raw.githubusercontent.com/PeterSuh-Q3/tcrp-addons/master/localrss/src/install.sh",
-      "sha256": "706068b6d5954db3ca2c851233b497c09f31cad743f61d8e12578fa16c4db164",
+      "sha256": "dd359eb6e7c79728bafec56fb95043737d4d7041b68481a535dedec2b609cd34",
       "packed": false
     },
     {
@@ -22,6 +22,12 @@
       "name": "rss7.2.0.json",
       "url": "https://raw.githubusercontent.com/PeterSuh-Q3/tcrp-addons/master/localrss/src/rss7.2.0.json",
       "sha256": "7e55422d36457cc7b377a7aad9749d535e401eb63d3eb6bb0c570db6bb7a80d2",
+      "packed": false
+    },
+    {
+      "name": "rss7.2.1.json",
+      "url": "https://raw.githubusercontent.com/PeterSuh-Q3/tcrp-addons/master/localrss/src/rss7.2.1.json",
+      "sha256": "1e6e6435c945fbb0d684880f9a550f2c468b6489ebf46ce3df45a888ed2a5cc7",
       "packed": false
     }
   ],

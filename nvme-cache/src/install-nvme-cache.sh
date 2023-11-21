@@ -1,12 +1,18 @@
 #!/bin/bash
 
+# |       models      |     1st      |     2nd      |
+# | DS918+            | 0000:00:13.1 | 0000:00:13.2 |
+# | RS1619xs+         | 0000:00:03.2 | 0000:00:03.3 |
+# | DS419+, DS1019+   | 0000:00:14.1 |              |
+# | DS719+, DS1621xs+ | 0000:00:01.1 | 0000:00:01.0 |
+
 if [ $# -lt 1 ]; then
   tmpRoot=""
   libPath="/lib64"
   dsmMode="ON"
 else
   tmpRoot="/tmpRoot"
-  libPath="."
+  libPath="/exts/nvme-cache"
   dsmMode="OFF"
 fi
 
@@ -46,6 +52,8 @@ function prepare_nvme() {
       echo $nvme4hex
   fi
 
+  REVISION="$(uname -a | cut -d ' ' -f4)"
+  echo "REVISION = ${REVISION}"
   if [ $(uname -a | grep '4.4.302+' | wc -l) -gt 0 ]; then
     #nvmefile="${libPath}/libsynonvme.so.7.2"
     #if [ $(uname -u | cut -d '_' -f2 | grep 'geminilake\|v1000\|r1000' | wc -l) -gt 0 ]; then
@@ -54,10 +62,16 @@ function prepare_nvme() {
     #if [ $(uname -a | grep '918+\|1019+\|1621xs+' | wc -l) -gt 0 ]; then
       nvmefile="${libPath}/libsynonvme.so.7.2.xxd"
     #fi
-  elif [ $(uname -a | grep '4.4.108+' | wc -l) -gt 0 ]; then
-    nvmefile="${libPath}/libsynonvme.so.7.1"
+  elif [ $(uname -a | grep '4.4.180+' | wc -l) -gt 0 ]; then
+    if [ ${REVISION} = "#42218" ]; then
+      nvmefile="${libPath}/libsynonvme.so.7.0"
+    else
+      nvmefile="${libPath}/libsynonvme.so.7.1"
+    fi  
   fi  
 
+  echo "nvmefile = ${nvmefile}"
+ 
   if [ $(uname -a | grep '918+' | wc -l) -gt 0 ]; then
     if [ $(echo $nvmepath2 | wc -w) -gt 0 ]; then
         xxd -c 256 ${nvmefile} | sed "s/3a31 332e 3100/$nvme1hex/" | sed "s/3133 2e32/$nvme2hex/" | xxd -c 256 -r > /etc/libsynonvme.so.1
@@ -73,20 +87,17 @@ function prepare_nvme() {
         xxd -c 256 ${nvmefile} | sed "s/3031 2e31/$nvme3hex/" | xxd -c 256 -r > /etc/libsynonvme.so.1
     fi
   else
-      if [ $(echo $nvmepath1 | wc -w) -gt 0 ]; then
-          rm -f /etc/extensionPorts
-          echo "[pci]" > /etc/extensionPorts
-          echo "pci1=\"$nvmepath1\"" >> /etc/extensionPorts
-          chmod 755 /etc/extensionPorts
-
-          cat /etc/extensionPorts
-      fi
-
-      if [ $(echo $nvmepath2 | wc -w) -gt 0 ]; then
-          echo "pci2=\"$nvmepath2\"" >> /etc/extensionPorts
-
-          cat /etc/extensionPorts
-      fi
+    rm -f /etc/extensionPorts
+    echo "[pci]" >/etc/extensionPorts
+    chmod 755 /etc/extensionPorts
+    
+    NVME_PORTS=$(ls /sys/class/nvme | wc -w)
+    for I in $(seq 0 $((${NVME_PORTS} - 1))); do  
+      _PATH=$(/usr/sbin/readlink /sys/class/nvme/nvme${I} | sed 's|^.*\(pci.*\)|\1|' | cut -d'/' -f2- | cut -d'/' -f1) 
+      COUNT=$((${I} + 1))
+      echo "pci${COUNT}=\"${_PATH}\"" >>/etc/extensionPorts ;   
+    done
+    cat /etc/extensionPorts
   fi
 }
 
