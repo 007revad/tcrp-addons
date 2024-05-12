@@ -9,10 +9,10 @@
     {
       "name": "install.sh",
       "url": "https://raw.githubusercontent.com/PeterSuh-Q3/tcrp-addons/main/disks/releases/install.sh",
-      "sha256": "ac31bff00c01018167a9897db00d591957acaeb1ad0af93e787f6f90e193467f",
+      "sha256": "7d0a8d444e71ee9cc045073459f8f2e949acb696a466dd1707858e87fc26a9da",
       "packed": false
     },
-	 {
+    {
       "name": "readlink",
       "url": "https://raw.githubusercontent.com/PeterSuh-Q3/tcrp-addons/main/disks/releases/readlink",
       "sha256": "5498cc736ad654b3c4828002a7067a8ad4e375409350666ca59f6c0547fc2afa",

@@ -3,6 +3,11 @@
 model=$(uname -u | cut -d '_' -f3)
 echo model "${model}" >&2  # debug
 
+# Host db files
+dbpath="/var/lib/disk-compatibility/"
+dbfile=$(ls "${dbpath}"*"${model}_host_v7.db")
+echo dbfile "${dbfile}" >&2  # debug
+
 if [ "${1}" = "modules" ]; then
 
   #------------------------------------------------------------------------------
@@ -77,20 +82,24 @@ if [ "${1}" = "modules" ]; then
 
         echo hdmodel "${hdmodel}" >&2  # debug
         echo fwrev "${fwrev}" >&2      # debug
-        
+
         if [ -n "${hdmodel}" ] && [ -n "${fwrev}" ]; then
-            if grep '"'"${hdmodel}"'":' /etc/disk_db.json >/dev/null; then
-               # Replace  "WD40PURX-64GVNY0":{  with  "WD40PURX-64GVNY0":{"80.00A80":{ ... }}},
-                echo "Insert firmware version:"  # debug
-                sed -i 's#"'"${hdmodel}"'":{#"'"${hdmodel}"'":{"'"${fwrev}"'":{"compatibility_interval":[{"compatibility":"support","not_yet_rolling_status":"support","fw_dsm_update_status_notify":false,"barebone_installable":true}]},#' /etc/disk_db.json
-            else
-               # Add  "WD40PURX-64GVNY0":{"80.00A80":{ ... }}},"default":{ ... }}}
-                echo "Append drive and firmware:"  # debug
-                jsondata='"'"${hdmodel}"'":{"'"${fwrev}"'":{"compatibility_interval":[{"compatibility":"support","not_yet_rolling_status":"support","fw_dsm_update_status_notify":false,"barebone_installable":true}]},
-                "default":{"compatibility_interval":[{"compatibility":"support","not_yet_rolling_status":"support","fw_dsm_update_status_notify":false,"barebone_installable":true}]}}' && echo $jsondata >> /etc/disk_db.json
-                echo "," >> /etc/disk_db.json
-            fi                    
-        fi
+          if [ $(cat "${dbfile}" | grep "${hdmodel}" | wc -l) -gt 0 ]; then
+            echo "${hdmodel} is already exists in ${dbfile}, skip writing to /etc/disk_db.json" >&2  # debug
+          else
+              if grep '"'"${hdmodel}"'":' /etc/disk_db.json >/dev/null; then
+                 # Replace  "WD40PURX-64GVNY0":{  with  "WD40PURX-64GVNY0":{"80.00A80":{ ... }}},
+                  echo "Insert firmware version:"  # debug
+                  sed -i 's#"'"${hdmodel}"'":{#"'"${hdmodel}"'":{"'"${fwrev}"'":{"compatibility_interval":[{"compatibility":"support","not_yet_rolling_status":"support","fw_dsm_update_status_notify":false,"barebone_installable":true,"smart_test_ignore":false,"smart_attr_ignore":false}]},#' /etc/disk_db.json
+              else
+                 # Add  "WD40PURX-64GVNY0":{"80.00A80":{ ... }}},"default":{ ... }}}
+                  echo "Append drive and firmware:"  # debug
+                  jsondata='"'"${hdmodel}"'":{"'"${fwrev}"'":{"compatibility_interval":[{"compatibility":"support","not_yet_rolling_status":"support","fw_dsm_update_status_notify":false,"barebone_installable":true,"smart_test_ignore":false,"smart_attr_ignore":false}]},
+                  "default":{"compatibility_interval":[{"compatibility":"support","not_yet_rolling_status":"support","fw_dsm_update_status_notify":false,"barebone_installable":true,"smart_test_ignore":false,"smart_attr_ignore":false}]}}' && echo $jsondata >> /etc/disk_db.json
+                  echo "," >> /etc/disk_db.json
+              fi                    
+          fi
+       fi   
     fi
   }
 
@@ -108,11 +117,6 @@ if [ "${1}" = "modules" ]; then
   done
   sed -i '$s/,$/}/' /etc/disk_db.json
   #cat /etc/disk_db.json
-  
-  # Host db files
-  dbpath="/var/lib/disk-compatibility/"
-  dbfile=$(ls "${dbpath}"*"${model}_host_v7.db")
-  echo dbfile "${dbfile}" >&2  # debug
 
   diskdata=$(jq . /etc/disk_db.json)
   jsonfile=$(jq '.disk_compatbility_info |= .+ '"$diskdata" ${dbfile}) && echo $jsonfile | jq . > ${dbfile}
@@ -120,6 +124,9 @@ if [ "${1}" = "modules" ]; then
   #jq '.disk_compatbility_info | to_entries | map(select(.value != null)) | .[-8:]' ${dbfile}
 
   cp -vf ${dbfile} /etc/
+
+  #synosetkeyvalue "/etc.defaults/synoinfo.conf" "drive_db_test_url" "127.0.0.1"
+  #synosetkeyvalue "/etc/synoinfo.conf" "drive_db_test_url" "127.0.0.1"
   
 elif [ "${1}" = "late" ]; then
   echo "copy disk_db.json file....."
@@ -128,4 +135,8 @@ elif [ "${1}" = "late" ]; then
   echo "copy db file to /tmpRoot/....."
   cp -vf /etc/*${model}_host_v7.db /tmpRoot/etc/
   cp -vf /etc/*${model}_host_v7.db /tmpRoot/var/lib/disk-compatibility/
+
+  echo 'drive_db_test_url="127.0.0.1"' >> /tmpRoot/etc.defaults/synoinfo.conf
+  echo 'drive_db_test_url="127.0.0.1"' >> /tmpRoot/etc/synoinfo.conf
+
 fi

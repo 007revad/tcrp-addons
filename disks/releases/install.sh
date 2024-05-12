@@ -6,10 +6,14 @@
 # See /LICENSE for more information.
 #
 
+MODELS="DS918+ RS1619xs+ DS419+ DS1019+ DS719+ DS1621xs+"
+MODEL=$(cat /proc/sys/kernel/syno_hw_version)
+tmpRoot="/tmpRoot"
+
 # Get values in synoinfo.conf K=V file
 # 1 - key
 function _get_conf_kv() {
-  grep "${1}=" /etc/synoinfo.conf | sed "s|^${1}=\"\(.*\)\"$|\1|g"
+  grep "${1}=" /etc/synoinfo.conf 2>/dev/null | sed "s|^${1}=\"\(.*\)\"$|\1|g"
 }
 
 # Replace/add values in synoinfo.conf K=V file
@@ -79,61 +83,67 @@ function _atoi() {
 #   KernelVersionCode "2.6.32"  => 132640
 #   KernelVersionCode "3"       => 196608
 #   KernelVersionCode "3.0.0"   => 196608
-function _kernelVersionCode()
-{
-	[ $# -eq 1 ] || return
+function _kernelVersionCode() {
+  [ $# -eq 1 ] || return
 
-	local _version_string _major_version _minor_version _revision
-	_version_string="$(echo "$1" | /usr/bin/cut -d'_' -f1)."
-	_major_version=$(echo "${_version_string}" | /usr/bin/cut -d'.' -f1)
-	_minor_version=$(echo "${_version_string}" | /usr/bin/cut -d'.' -f2)
-	_revision=$(echo "${_version_string}" | /usr/bin/cut -d'.' -f3)
+  local _version_string _major_version _minor_version _revision
+  _version_string="$(echo "$1" | /usr/bin/cut -d'_' -f1)."
+  _major_version=$(echo "${_version_string}" | /usr/bin/cut -d'.' -f1)
+  _minor_version=$(echo "${_version_string}" | /usr/bin/cut -d'.' -f2)
+  _revision=$(echo "${_version_string}" | /usr/bin/cut -d'.' -f3)
 
-	/bin/echo $((${_major_version:-0} * 65536 + ${_minor_version:-0} * 256 + ${_revision:-0}))
+  /bin/echo $((${_major_version:-0} * 65536 + ${_minor_version:-0} * 256 + ${_revision:-0}))
 }
 
 # Get current linux kernel version without extra version
 # format: VERSION.PATCHLEVEL.SUBLEVEL
 # ex. "2.6.32"
-function _kernelVersion()
-{
-	local _release
-	_release=$(/bin/uname -r)
-	/bin/echo ${_release%%[-+]*} | /usr/bin/cut -d'.' -f1-3
+function _kernelVersion() {
+  local _release
+  _release=$(/bin/uname -r)
+  /bin/echo ${_release%%[-+]*} | /usr/bin/cut -d'.' -f1-3
 }
-
-devtype="$(blkid | grep "6234-C863" | cut -c 6-7 )"
-if [ "${devtype}" = "sd" ]; then
-  BOOTDISK="$(blkid | grep "6234-C863" | cut -c 6-8 )"
-elif [ "${devtype}" = "sa" ]; then
-  BOOTDISK="$(blkid | grep "6234-C863" | cut -c 6-10 )"
-elif [ "${devtype}" = "nv" ]; then  
-  BOOTDISK="$(blkid | grep "6234-C863" | cut -c 6-10 )"
-fi  
 
 # synoboot
 function checkSynoboot() {
-  [ -b /dev/synoboot -a -b /dev/synoboot1 -a -b /dev/synoboot2 ] && return
+  [ -b /dev/synoboot -a -b /dev/synoboot1 -a -b /dev/synoboot2 -a -b /dev/synoboot3 ] && return
   [ -z "${BOOTDISK}" ] && return
 
-  [ ! -b /dev/synoboot -a -d /sys/block/${BOOTDISK} ] &&
+  if [ ! -b /dev/synoboot -a -d /sys/block/${BOOTDISK} ]; then
     /bin/mknod /dev/synoboot b $(cat /sys/block/${BOOTDISK}/dev | sed 's/:/ /') >/dev/null 2>&1
-  # sataN, nvmeN
-  [ ! -b /dev/synoboot1 -a -d /sys/block/${BOOTDISK}/${BOOTDISK}p1 ] &&
+    rm -vf /dev/${BOOTDISK}
+  fi
+  # sataN, nvmeXnN, mmcblkN
+  if [ ! -b /dev/synoboot1 -a -d /sys/block/${BOOTDISK}/${BOOTDISK}p1 ]; then
     /bin/mknod /dev/synoboot1 b $(cat /sys/block/${BOOTDISK}/${BOOTDISK}p1/dev | sed 's/:/ /') >/dev/null 2>&1
-  [ ! -b /dev/synoboot2 -a -d /sys/block/${BOOTDISK}/${BOOTDISK}p2 ] &&
+    rm -vf /dev/${BOOTDISK}p1
+  fi
+  if [ ! -b /dev/synoboot2 -a -d /sys/block/${BOOTDISK}/${BOOTDISK}p2 ]; then
     /bin/mknod /dev/synoboot2 b $(cat /sys/block/${BOOTDISK}/${BOOTDISK}p2/dev | sed 's/:/ /') >/dev/null 2>&1
-  # sdN
-  [ ! -b /dev/synoboot1 -a -d /sys/block/${BOOTDISK}/${BOOTDISK}1 ] &&
+    rm -vf /dev/${BOOTDISK}p2
+  fi
+  if [ ! -b /dev/synoboot3 -a -d /sys/block/${BOOTDISK}/${BOOTDISK}p3 ]; then
+    /bin/mknod /dev/synoboot3 b $(cat /sys/block/${BOOTDISK}/${BOOTDISK}p3/dev | sed 's/:/ /') >/dev/null 2>&1
+    rm -vf /dev/${BOOTDISK}p3
+  fi
+  # sdN, vdN
+  if [ ! -b /dev/synoboot1 -a -d /sys/block/${BOOTDISK}/${BOOTDISK}1 ]; then
     /bin/mknod /dev/synoboot1 b $(cat /sys/block/${BOOTDISK}/${BOOTDISK}1/dev | sed 's/:/ /') >/dev/null 2>&1
-  [ ! -b /dev/synoboot2 -a -d /sys/block/${BOOTDISK}/${BOOTDISK}2 ] &&
+    rm -vf /dev/${BOOTDISK}1
+  fi
+  if [ ! -b /dev/synoboot2 -a -d /sys/block/${BOOTDISK}/${BOOTDISK}2 ]; then
     /bin/mknod /dev/synoboot2 b $(cat /sys/block/${BOOTDISK}/${BOOTDISK}2/dev | sed 's/:/ /') >/dev/null 2>&1
-
+    rm -vf /dev/${BOOTDISK}2
+  fi
+  if [ ! -b /dev/synoboot3 -a -d /sys/block/${BOOTDISK}/${BOOTDISK}3 ]; then
+    /bin/mknod /dev/synoboot3 b $(cat /sys/block/${BOOTDISK}/${BOOTDISK}3/dev | sed 's/:/ /') >/dev/null 2>&1
+    rm -vf /dev/${BOOTDISK}3
+  fi
 }
 
 # USB ports
 function getUsbPorts() {
-  for I in $(ls -d /sys/bus/usb/devices/usb*); do
+  for I in $(ls -d /sys/bus/usb/devices/usb* 2>/dev/null); do
     # ROOT
     DCLASS=$(cat ${I}/bDeviceClass)
     [ ! "${DCLASS}" = "09" ] && continue
@@ -165,38 +175,6 @@ function getUsbPorts() {
   echo
 }
 
-# NVME ports
-# 1 - is DT model
-function nvmePorts() {
-  local PCI_ER="^[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-9a-fA-F]{1}"
-  local NVME_PORTS=$(ls /sys/class/nvme | wc -w)
-
-  for I in $(seq 0 $((${NVME_PORTS} - 1))); do
-    if [ -n "${BOOTDISK}" -a -d "/sys/class/nvme/nvme${I}/${BOOTDISK}" ]; then
-      checkSynoboot
-      continue
-    fi
-    _PATH=$(readlink /sys/class/nvme/nvme${I} | sed 's|^.*\(pci.*\)|\1|' | cut -d'/' -f2-)
-    if [ "${1}" = "true" ]; then
-      # Device-tree: assemble complete path in DSM format
-      DSMPATH=""
-      while true; do
-        FIRST=$(echo "${_PATH}" | cut -d'/' -f1)
-        echo "${FIRST}" | grep -qE "${PCI_ER}" || break
-        [ -z "${DSMPATH}" ] &&
-          DSMPATH="$(echo "${FIRST}" | cut -d':' -f2-)" ||
-          DSMPATH="${DSMPATH},$(echo "${FIRST}" | cut -d':' -f3)"
-        _PATH=$(echo ${_PATH} | cut -d'/' -f2-)
-      done
-    else
-      # Non-dt: just get PCI ID
-      DSMPATH=$(echo "${_PATH}" | cut -d'/' -f1)
-    fi
-    echo -n "${DSMPATH} "
-  done
-  echo
-}
-
 #
 function dtModel() {
   DEST="/etc/model.dts"
@@ -210,7 +188,7 @@ function dtModel() {
 
     # NVME power_limit
     POWER_LIMIT=""
-    NVME_PORTS=$(ls /sys/class/nvme | wc -w)
+    NVME_PORTS=$(ls /sys/class/nvme 2>/dev/null | wc -w)
     for I in $(seq 0 $((${NVME_PORTS} - 1))); do
       [ ${I} -eq 0 ] && POWER_LIMIT="100" || POWER_LIMIT="${POWER_LIMIT},100"
     done
@@ -230,18 +208,20 @@ function dtModel() {
         for Q in $(ls -l /sys/class/scsi_host 2>/dev/null | grep ${P} | head -1 | grep -oE ":..\.."); do PCIPATH="${PCIPATH},${Q//:/}"; done
         [ -z "${PCIPATH}" ] && continue
         if [ "$(_kernelVersionCode "$(_kernelVersion)")" -ge "$(_kernelVersionCode "5.10")" ]; then
-          PCIPATH="0000:00:${PCIPATH:1}"  # 5.10+ kernel  TODO: check 0000
+          PCIPATH="0000:00:${PCIPATH:1}" # 5.10+ kernel  TODO: check 0000
         else
-          PCIPATH="00:${PCIPATH:1}"       # 5.10- kernel
+          PCIPATH="00:${PCIPATH:1}" # 5.10- kernel
+        fi
+
+        IDX=""
+        if [ -n "${BOOTDISK_PHYSDEVPATH}" ] && echo "${BOOTDISK_PHYSDEVPATH}" | grep -q "${P}"; then
+          IDX=$(ls -l /sys/class/scsi_host 2>/dev/null | grep ${P} | sort -V | grep -n "${BOOTDISK_PHYSDEVPATH%%target*}" | head -1 | cut -d: -f1)
+          if [ -n "${IDX}" ] && echo "${IDX}" | grep -q -E '^[0-9]+$'; then if [ ${IDX} -gt 0 ]; then IDX=$((${IDX} - 1)); else IDX="0"; fi; else IDX=""; fi
+          echo "bootloader: PCIPATH:${PCIPATH}; IDX:${IDX}"
         fi
 
         for J in $(seq 0 $((${HOSTNUM} - 1))); do
-          ATAPORT=""
-          if [ "sata${J}" = "${BOOTDISK}" ]; then
-            ATAPORT=$(grep 'ata_port_no' /sys/block/sata${J}/device/syno_block_info | cut -d'=' -f2)
-            checkSynoboot
-          fi
-          [ "${J}" = "${ATAPORT}" ] && continue
+          [ "${J}" = "${IDX}" ] && continue
           echo "    internal_slot@${I} {" >>${DEST}
           echo "        protocol_type = \"sata\";" >>${DEST}
           echo "        ahci {" >>${DEST}
@@ -252,16 +232,41 @@ function dtModel() {
           I=$((${I} + 1))
         done
       done
+      for P in $(lspci -d ::107 2>/dev/null | cut -d' ' -f1) $(lspci -d ::104 2>/dev/null | cut -d' ' -f1) $(lspci -d ::100 2>/dev/null | cut -d' ' -f1); do
+        J=1
+        while true; do
+          [ ! -d /sys/block/sata${J} ] && break
+          if cat /sys/block/sata${J}/uevent 2>/dev/null | grep 'PHYSDEVPATH' | grep -q "${P}"; then
+            if [ -n "${BOOTDISK_PHYSDEVPATH}" -a "${BOOTDISK_PHYSDEVPATH}" = "$(cat /sys/block/sata${J}/uevent 2>/dev/null | grep 'PHYSDEVPATH' | cut -d'=' -f2)" ]; then
+              echo "bootloader: /sys/block/sata${J}"
+            else
+              PCIEPATH=$(grep 'pciepath' /sys/block/sata${J}/device/syno_block_info 2>/dev/null | cut -d'=' -f2)
+              ATAPORT=$(grep 'ata_port_no' /sys/block/sata${J}/device/syno_block_info 2>/dev/null | cut -d'=' -f2)
+              if [ -n "${PCIEPATH}" -a -n "${ATAPORT}" ]; then
+                echo "    internal_slot@${I} {" >>${DEST}
+                echo "        protocol_type = \"sata\";" >>${DEST}
+                echo "        ahci {" >>${DEST}
+                echo "            pcie_root = \"${PCIEPATH}\";" >>${DEST}
+                echo "            ata_port = <0x$(printf '%02X' ${ATAPORT})>;" >>${DEST}
+                echo "        };" >>${DEST}
+                echo "    };" >>${DEST}
+                I=$((${I} + 1))
+              fi
+            fi
+          fi
+          J=$((${J} + 1))
+        done
+      done
     else
       I=1
       J=1
       while true; do
         [ ! -d /sys/block/sata${J} ] && break
-        if [ "sata${J}" = "${BOOTDISK}" ]; then
-          checkSynoboot
+        if [ -n "${BOOTDISK_PHYSDEVPATH}" -a "${BOOTDISK_PHYSDEVPATH}" = "$(cat /sys/block/sata${J}/uevent 2>/dev/null | grep 'PHYSDEVPATH' | cut -d'=' -f2)" ]; then
+          echo "bootloader: /sys/block/sata${J}"
         else
-          PCIEPATH=$(grep 'pciepath' /sys/block/sata${J}/device/syno_block_info | cut -d'=' -f2)
-          ATAPORT=$(grep 'ata_port_no' /sys/block/sata${J}/device/syno_block_info | cut -d'=' -f2)
+          PCIEPATH=$(grep 'pciepath' /sys/block/sata${J}/device/syno_block_info 2>/dev/null | cut -d'=' -f2)
+          ATAPORT=$(grep 'ata_port_no' /sys/block/sata${J}/device/syno_block_info 2>/dev/null | cut -d'=' -f2)
           if [ -n "${PCIEPATH}" -a -n "${ATAPORT}" ]; then
             echo "    internal_slot@${I} {" >>${DEST}
             echo "        protocol_type = \"sata\";" >>${DEST}
@@ -276,22 +281,33 @@ function dtModel() {
         J=$((${J} + 1))
       done
     fi
-    NUMPORTS=$((${I} - 1))
-    if [ $NUMPORTS -le 2 ]; then
+    MAXDISKS=$((${I} - 1))
+    if _check_post_k "rd" "maxdisks"; then
+      MAXDISKS=$(($(_get_conf_kv maxdisks)))
+      echo "get maxdisks=${MAXDISKS}"
+    else
       # fix isSingleBay issue: if maxdisks is 1, there is no create button in the storage panel
-      NUMPORTS=4
+      # [ ${MAXDISKS} -le 2 ] && MAXDISKS=4
+      [ ${MAXDISKS} -lt 26 ] && MAXDISKS=26
     fi
-    _set_conf_kv rd "maxdisks" "${NUMPORTS}"
-    echo "maxdisks=${NUMPORTS}"
+    _set_conf_kv rd "maxdisks" "${MAXDISKS}"
+    echo "maxdisks=${MAXDISKS}"
 
     # NVME ports
     COUNT=1
-    for P in $(nvmePorts true); do
-      echo "    nvme_slot@${COUNT} {" >>${DEST}
-      echo "        pcie_root = \"${P}\";" >>${DEST}
-      echo "        port_type = \"ssdcache\";" >>${DEST}
-      echo "    };" >>${DEST}
-      COUNT=$((${COUNT} + 1))
+    for P in $(ls -d /sys/block/nvme* 2>/dev/null); do
+      if [ -n "${BOOTDISK_PHYSDEVPATH}" -a "${BOOTDISK_PHYSDEVPATH}" = "$(cat ${P}/uevent 2>/dev/null | grep 'PHYSDEVPATH' | cut -d'=' -f2)" ]; then
+        echo "bootloader: ${P}"
+        continue
+      fi
+      PCIEPATH=$(grep 'pciepath' ${P}/device/syno_block_info 2>/dev/null | cut -d'=' -f2)
+      if [ -n "${PCIEPATH}" ]; then
+        echo "    nvme_slot@${COUNT} {" >>${DEST}
+        echo "        pcie_root = \"${PCIEPATH}\";" >>${DEST}
+        echo "        port_type = \"ssdcache\";" >>${DEST}
+        echo "    };" >>${DEST}
+        COUNT=$((${COUNT} + 1))
+      fi
     done
 
     # USB ports
@@ -319,14 +335,29 @@ function nondtModel() {
   USBPORTCFG=0
   ESATAPORTCFG=0
   INTERNALPORTCFG=0
-  HBA_NUMBER=$(lspci -d ::107 2>/dev/null | wc -l)
+  HBA_NUMBER=$(($(lspci -d ::107 2>/dev/null | wc -l) + $(lspci -d ::104 2>/dev/null | wc -l) + $(lspci -d ::100 2>/dev/null | wc -l)))
 
-  for I in $(ls -d /sys/block/sd*); do
+  for I in $(ls -d /sys/block/sd* 2>/dev/null); do
     IDX=$(_atoi ${I/\/sys\/block\/sd/})
     ISUSB="$(cat ${I}/uevent 2>/dev/null | grep PHYSDEVPATH | grep usb)"
     [ -n "${ISUSB}" ] && USBPORTCFG=$((${USBPORTCFG} | $((1 << ${IDX}))))
     [ $((${IDX} + 1)) -ge ${MAXDISKS} ] && MAXDISKS=$((${IDX} + 1))
   done
+
+  if _check_post_k "rd" "maxdisks"; then
+    MAXDISKS=$(($(_get_conf_kv maxdisks)))
+    echo "get maxdisks=${MAXDISKS}"
+  else
+    # fix isSingleBay issue: if maxdisks is 1, there is no create button in the storage panel
+    # [ ${MAXDISKS} -le 2 ] && MAXDISKS=4
+    [ ${MAXDISKS} -lt 26 ] && MAXDISKS=26
+  fi
+
+  # Raidtool will read maxdisks, but when maxdisks is greater than 27, formatting error will occur 8%.
+  if ! _check_rootraidstatus && [ ${MAXDISKS} -gt 26 ]; then
+    MAXDISKS=26
+    echo "set maxdisks=26 [${MAXDISKS}]"
+  fi
 
   if _check_post_k "rd" "usbportcfg"; then
     USBPORTCFG=$(($(_get_conf_kv usbportcfg)))
@@ -351,51 +382,41 @@ function nondtModel() {
     echo "set internalportcfg=${INTERNALPORTCFG}"
   fi
 
-  if _check_post_k "rd" "maxdisks"; then
-    MAXDISKS=$(($(_get_conf_kv maxdisks)))
-    echo "get maxdisks=${MAXDISKS}"
-  else
-    [ ${HBA_NUMBER} -gt 0 ] && MAXDISKS=26
-  fi
-  # Raidtool will read maxdisks, but when maxdisks is greater than 27, formatting error will occur 8%.
-  if ! _check_rootraidstatus && [ ${MAXDISKS} -gt 26 ]; then
-    _set_conf_kv rd "maxdisks" "26"
-    echo "set maxdisks=26 [${MAXDISKS}]"
-  # fix isSingleBay issue: if maxdisks is 1, there is no create button in the storage panel
-  elif ! _check_rootraidstatus && [ ${MAXDISKS} -le 2 ]; then
-    _set_conf_kv rd "maxdisks" "4"
-    echo "set maxdisks=4 [${MAXDISKS}]"
-  else
-    _set_conf_kv rd "maxdisks" "${MAXDISKS}"
-    echo "set maxdisks=${MAXDISKS}"
-  fi
-
-  # NVME
-  COUNT=1
-  rm -f /etc/extensionPorts
-  echo "[pci]" >/etc/extensionPorts
-  chmod 755 /etc/extensionPorts
-  for P in $(nvmePorts false); do
-    echo "pci${COUNT}=\"${P}\"" >>/etc/extensionPorts
-    COUNT=$((${COUNT} + 1))
-  done
-  if [ $(ls /sys/class/nvme | wc -w) -gt 0 ]; then
-    _set_conf_kv rd "supportnvme" "yes"
-    _set_conf_kv rd "support_m2_pool" "yes"
-  fi
-
-  checkSynoboot
+  _set_conf_kv rd "maxdisks" "${MAXDISKS}"
+  echo "set maxdisks=${MAXDISKS}"
 
   if [ "${1}" = "true" ]; then
     echo "TODO: no-DT's sort!!!"
   fi
+
+  # NVME
+  COUNT=1
+  echo "[pci]" >/etc/extensionPorts
+  for P in $(ls -d /sys/block/nvme* 2>/dev/null); do
+    if [ -n "${BOOTDISK_PHYSDEVPATH}" -a "${BOOTDISK_PHYSDEVPATH}" = "$(cat ${P}/uevent 2>/dev/null | grep 'PHYSDEVPATH' | cut -d'=' -f2)" ]; then
+      echo "bootloader: ${P}"
+      continue
+    fi
+    PCIEPATH=$(cat ${P}/uevent 2>/dev/null | grep 'PHYSDEVPATH' | cut -d'/' -f4)
+    if [ -n "${PCIEPATH}" ]; then
+      # TODO: Need check?
+      # MULTIPATH=$(cat ${P}/uevent 2>/dev/null | grep 'PHYSDEVPATH' | cut -d'/' -f5)
+      # if [ -z "${MULTIPATH}" ]; then
+      #   echo "${PCIEPATH} does not support!"
+      #   continue
+      # fi
+      echo "pci${COUNT}=\"${PCIEPATH}\"" >>/etc/extensionPorts
+      COUNT=$((${COUNT} + 1))
+
+      _set_conf_kv rd "supportnvme" "yes"
+      _set_conf_kv rd "support_m2_pool" "yes"
+    fi
+  done
 }
 
-MODEL="$(uname -u)"
-[ -f /etc/model.dtb ] || [ -f /etc.defaults/model.dtb ] && ISDTMODEL="true"
 #
 if [ "${1}" = "modules" ]; then
-
+  echo "Installing addon disks - ${1}"
   cp -vf dtc /usr/sbin/
   cp -vf readlink /usr/sbin/
   cp -vf sed /usr/sbin/sed
@@ -404,15 +425,89 @@ if [ "${1}" = "modules" ]; then
 
   chmod 755 /usr/sbin/dtc /usr/sbin/readlink /usr/sbin/sed /usr/sbin/blkid /lib64/libblkid.so.1
 
-#  echo "Adjust disks related configs automatically - modules"
-#  [[ ${ISDTMODEL} = true ]] && dtModel $MODEL || nondtModel
-  
 elif [ "${1}" = "patches" ]; then
-  echo "Adjust disks related configs automatically - patches"
-  [ "$(_get_conf_kv supportportmappingv2)" = "yes" ] && dtModel "${MODEL}" || nondtModel "${MODEL}"
+  echo "Installing addon disks - ${1}"
+  BOOTDISK=""
+  BOOTDISK_PART3=$(blkid -U "6234-C863" 2>/dev/null | sed 's/\/dev\///')
+  [ -n "${BOOTDISK_PART3}" ] && BOOTDISK=$(ls -d /sys/block/*/${BOOTDISK_PART3} 2>/dev/null | cut -d'/' -f4)
+  [ -n "${BOOTDISK}" ] && BOOTDISK_PHYSDEVPATH="$(cat /sys/block/${BOOTDISK}/uevent 2>/dev/null | grep 'PHYSDEVPATH' | cut -d'=' -f2)" || BOOTDISK_PHYSDEVPATH=""
+  echo "BOOTDISK=${BOOTDISK}"
+  echo "BOOTDISK_PHYSDEVPATH=${BOOTDISK_PHYSDEVPATH}"
+
+  # NVMe cache handling for models using libsynonvme.so.1
+  rm -f /etc/nvmePorts
+  for P in $(ls -d /sys/block/nvme* 2>/dev/null); do
+    if [ -n "${BOOTDISK_PHYSDEVPATH}" -a "${BOOTDISK_PHYSDEVPATH}" = "$(cat ${P}/uevent | grep 'PHYSDEVPATH' | cut -d'=' -f2)" ]; then
+      echo "bootloader: ${P}"
+      continue
+    fi
+    PCIEPATH=$(cat ${P}/uevent 2>/dev/null | grep 'PHYSDEVPATH' | cut -d'/' -f4)
+    if [ -n "${PCIEPATH}" ]; then
+      # TODO: Need check?
+      MULTIPATH=$(cat ${P}/uevent 2>/dev/null | grep 'PHYSDEVPATH' | cut -d'/' -f5)
+      if [ -z "${MULTIPATH}" ]; then
+        echo "${PCIEPATH} does not support!"
+        continue
+      fi
+      echo "${PCIEPATH}" >>/etc/nvmePorts
+    fi
+  done
+  [ -f /etc/nvmePorts ] && cat /etc/nvmePorts
+  
+  checkSynoboot
+
+  [ "$(_get_conf_kv supportportmappingv2)" = "yes" ] && dtModel "${2}" || nondtModel "${2}"
 
 elif [ "${1}" = "late" ]; then
-  echo "Adjust disks related configs automatically - late"
+  echo "Installing addon disks - ${1}"
+
+  # NVMe cache handling for models using libsynonvme.so.1
+  if echo ${MODELS} | grep -q ${MODEL}; then
+  #
+  # |       models      |     1st      |     2nd      |
+  # | DS918+            | 0000:00:13.1 | 0000:00:13.2 |
+  # | RS1619xs+         | 0000:00:03.2 | 0000:00:03.3 |
+  # | DS419+, DS1019+   | 0000:00:14.1 |              |
+  # | DS719+, DS1621xs+ | 0000:00:01.1 | 0000:00:01.0 |
+  #
+  # In the late stage, the /sys/ directory does not exist, and the device path cannot be obtained.
+  # (/dev/ does exist, but there is no useful information.)
+  # (The information obtained by lspci is incomplete and an error will be reported.)
+  # Therefore, the device path is obtained in the early stage and stored in /etc/nvmePorts.
+
+    SO_FILE="/tmpRoot/usr/lib/libsynonvme.so.1"
+    [ ! -f "${SO_FILE}.bak" ] && cp -vf "${SO_FILE}" "${SO_FILE}.bak"
+
+    cp -vf "${SO_FILE}.bak" "${SO_FILE}"
+
+    num=1
+    while read -r N; do
+      echo "${num} - ${N}"
+      if [ ${num} -eq 1 ]; then
+        if [ ${MODEL} = "DS918+" ]; then 
+          sed -i "s/0000:00:13.1/${N}/" "${SO_FILE}"
+        elif [ ${MODEL} = "RS1619xs+" ]; then
+          sed -i "s/0000:00:03.2/${N}/" "${SO_FILE}"
+        elif [ ${MODEL} = "DS419+" ]||[ ${MODEL} = "DS1019+" ]; then
+          sed -i "s/0000:00:14.1/${N}/" "${SO_FILE}"
+        elif [ ${MODEL} = "DS719+" ]||[ ${MODEL} = "DS1621xs+" ]; then
+          sed -i "s/0000:00:01.1/${N}/" "${SO_FILE}"
+        fi  
+      elif [ ${num} -eq 2 ]; then
+        if [ ${MODEL} = "DS918+" ]; then 
+          sed -i "s/0000:00:13.2/${N}/" "${SO_FILE}"
+        elif [ ${MODEL} = "RS1619xs+" ]; then
+          sed -i "s/0000:00:03.3/${N}/" "${SO_FILE}"        
+        elif [ ${MODEL} = "DS719+" ]||[ ${MODEL} = "DS1621xs+" ]; then
+          sed -i "s/0000:00:01.0/${N}/" "${SO_FILE}"        
+        fi  
+      else
+        break
+      fi
+      num=$((num + 1))
+    done < /etc/nvmePorts
+  fi
+  
   if [ "$(_get_conf_kv supportportmappingv2)" = "yes" ]; then
     echo "Copying /etc.defaults/model.dtb"
     # copy file
@@ -421,17 +516,14 @@ elif [ "${1}" = "late" ]; then
   else
     echo "Adjust maxdisks and internalportcfg automatically"
     # sysfs is unpopulated here, get the values from junior synoinfo.conf
-    MAXDISKS=$(_get_conf_kv maxdisks)
     USBPORTCFG=$(_get_conf_kv usbportcfg)
     ESATAPORTCFG=$(_get_conf_kv esataportcfg)
     INTERNALPORTCFG=$(_get_conf_kv internalportcfg)
     # log
-    echo "maxdisks=${MAXDISKS}"
     echo "usbportcfg=${USBPORTCFG}"
     echo "esataportcfg=${ESATAPORTCFG}"
     echo "internalportcfg=${INTERNALPORTCFG}"
     # set
-    _set_conf_kv hd "maxdisks" "${MAXDISKS}"
     _set_conf_kv hd "usbportcfg" "${USBPORTCFG}"
     _set_conf_kv hd "esataportcfg" "${ESATAPORTCFG}"
     _set_conf_kv hd "internalportcfg" "${INTERNALPORTCFG}"
@@ -439,6 +531,10 @@ elif [ "${1}" = "late" ]; then
     cp -vf /etc/extensionPorts /tmpRoot/etc/extensionPorts
     cp -vf /etc/extensionPorts /tmpRoot/etc.defaults/extensionPorts
   fi
+
+  MAXDISKS=$(_get_conf_kv maxdisks)
+  echo "maxdisks=${MAXDISKS}"
+  _set_conf_kv hd "maxdisks" "${MAXDISKS}"
 
   SUPPORTNVME=$(_get_conf_kv supportnvme)
   SUPPORT_M2_POOL=$(_get_conf_kv support_m2_pool)

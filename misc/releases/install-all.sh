@@ -102,7 +102,15 @@ fixintelgpu() {
             rm -f /tmpRoot/root/i915.ko.hex
 
             rmmod i915
-            insmod /tmpRoot/usr/lib/modules/i915.ko
+            /tmpRoot/usr/sbin/depmod -a
+            modprobe i915
+            sleep 1
+            
+            if [ `/tmpRoot/sbin/lsmod |grep -i i915|wc -l` -gt 0 ] ; then
+                echo "Module i915 loaded(modprobe) succesfully"
+            else
+                insmod /tmpRoot/usr/lib/modules/i915.ko            
+            fi            
           else
             echo "Intel GPU is detected (${GPU}), replace i915.ko error"
           fi
@@ -125,6 +133,8 @@ fixacpibutton() {
 
 if [ "${1}" = "late" ]; then
     echo "Script for fixing missing HW features dependencies"
+
+    fixacpibutton
     
     case "${PLATFORM}" in
 
